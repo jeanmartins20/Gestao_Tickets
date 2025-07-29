@@ -61,6 +61,11 @@ class DatabaseManager:
         query = "SELECT * FROM registros WHERE numero_ticket LIKE ? ORDER BY id DESC"
         return self._execute_query(query, (f'%{numero}%',), fetch='all')
 
+    def fetch_record_by_ticket_number(self, numero_ticket):
+        """Busca um registro pelo número do ticket exato."""
+        query = "SELECT * FROM registros WHERE numero_ticket = ?"
+        return self._execute_query(query, (numero_ticket,), fetch='one')
+
 
 class TicketApp:
     def __init__(self, root_window):
@@ -127,7 +132,8 @@ class TicketApp:
         self.acao_entry.grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
 
         ttk.Label(input_frame, text="Status:").grid(row=2, column=4, padx=5, pady=5, sticky="w")
-        status_options = ["Em Andamento", "Pendente", "Concluído", "Cancelado", "Aguardando Parceiro"]
+        # Status atualizados em ordem alfabética
+        status_options = ["Aguardando Parceiro", "Cancelado", "Em Andamento", "Fechado", "Pendente de Resposta", "Resolvido"]
         self.status_combobox = ttk.Combobox(input_frame, values=status_options, state="readonly")
         self.status_combobox.grid(row=2, column=5, padx=5, pady=5, sticky="ew")
         self.status_combobox.set("Em Andamento") # Define um status inicial
@@ -138,12 +144,15 @@ class TicketApp:
         button_frame.grid(row=1, column=0, padx=10, sticky="ew") # Posicionado abaixo do input_frame
 
         ttk.Button(button_frame, text="Adicionar", command=self._add_record).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Editar", command=self._update_record).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Deletar", command=self._delete_record).pack(side="left", padx=5)
+        # Botão Editar agora chama a nova janela de edição
+        ttk.Button(button_frame, text="Editar", command=self._open_edit_window).pack(side="left", padx=5)
+        # Botão Deletar agora chama a nova janela de deleção
+        ttk.Button(button_frame, text="Deletar", command=self._open_delete_window).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Buscar por Nº", command=self._search_record).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Limpar Campos", command=self._clear_fields).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Resumo e Gráfico", command=self._show_chart_popup).pack(side="left", padx=5) # Renomeado para clareza
+        ttk.Button(button_frame, text="Resumo e Gráfico", command=self._show_chart_popup).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Importar Dados", command=self._import_data).pack(side="left", padx=5)
+
 
         # Frame para a Treeview (tabela de tickets)
         tree_frame = ttk.Frame(self.root)
@@ -171,8 +180,6 @@ class TicketApp:
         # --- Seção Inferior: Cards de Estatísticas ---
         self.statistics_frame = ttk.Frame(self.root, padding=10)
         self.statistics_frame.grid(row=3, column=0, padx=10, pady=10, sticky="ew") # Posicionado abaixo da tree_frame
-        # Não precisamos de rowconfigure para esta linha se ela tiver um tamanho fixo ou se o conteúdo for gerenciado por pack/grid internamente.
-        # Mas para garantir expansão horizontal:
         self.statistics_frame.columnconfigure(0, weight=1)
         self.statistics_frame.columnconfigure(1, weight=1)
         self.statistics_frame.columnconfigure(2, weight=1)
@@ -225,8 +232,9 @@ class TicketApp:
         inicio_mes = hoje.replace(day=1)
 
         total_tickets = df.shape[0]
-        # Filtra tickets tratados (status 'Concluído')
-        df_treated = df[df['status'] == 'Concluído']
+        # Filtra tickets tratados (status 'Resolvido' ou 'Fechado')
+        # Adicionado 'Fechado' como status tratado
+        df_treated = df[df['status'].isin(['Resolvido', 'Fechado'])]
 
         treated_today = df_treated[df_treated['data'].dt.date == hoje].shape[0]
         treated_week = df_treated[df_treated['data'].dt.date >= inicio_semana].shape[0]
@@ -265,7 +273,7 @@ class TicketApp:
 
         # Configurar o gráfico de colunas
         fig_bar, ax_bar = plt.subplots(figsize=(10, 6))
-        ax_bar.bar(labels, values, color=['steelblue', 'olivedrab', 'indianred', 'mediumorchid', 'darkorange'])
+        ax_bar.bar(labels, values, color=['steelblue', 'olivedrab', 'indianred', 'mediumorchid', 'darkorange', 'gray']) # Adicionado mais cores
         ax_bar.set_title("Tickets por Status")
         ax_bar.set_xlabel("Status")
         ax_bar.set_ylabel("Número de Tickets")
@@ -316,32 +324,266 @@ class TicketApp:
         self._load_table()
         self._clear_fields()
 
-    def _update_record(self):
-        record_id = self.id_entry.get()
-        if not record_id:
-            messagebox.showwarning("Nenhum Registro", "Selecione um registro para editar.")
-            return
-        if not self._validate_inputs():
-            return
-        date = self._get_valid_date()
-        if not date:
-            return
-        self.db.update_record(record_id, date, self.numero_entry.get(), self.descricao_entry.get(),
-                              self.acao_entry.get(), self.status_combobox.get())
-        messagebox.showinfo("Sucesso", "Registro atualizado com sucesso!")
-        self._load_table()
-        self._clear_fields()
+    # --- NOVO: Método para abrir a janela de deleção de múltiplos registros ---
+    def _open_delete_window(self):
+        delete_window = tk.Toplevel(self.root)
+        delete_window.title("Deletar Registros")
+        delete_window.transient(self.root) # Define a janela principal como pai
+        delete_window.grab_set() # Bloqueia interação com a janela principal
+        delete_window.focus_set() # Foca na nova janela
+        delete_window.state("zoomed") # Abre em tela cheia
 
-    def _delete_record(self):
-        record_id = self.id_entry.get()
-        if not record_id:
-            messagebox.showwarning("Nenhum Registro", "Selecione um registro para deletar.")
-            return
-        if messagebox.askyesno("Confirmar", "Tem certeza que deseja deletar este registro?"):
-            self.db.delete_record(record_id)
-            messagebox.showinfo("Sucesso", "Registro deletado com sucesso!")
-            self._load_table()
-            self._clear_fields()
+        # Frame para a Treeview na janela de deleção
+        delete_tree_frame = ttk.Frame(delete_window, padding=10)
+        delete_tree_frame.pack(fill="both", expand=True)
+
+        cols = ("ID", "Data", "Nº Ticket", "Descrição", "Ação Realizada", "Status")
+        # Permite seleção múltipla
+        delete_tree = ttk.Treeview(delete_tree_frame, columns=cols, show='headings', selectmode='extended')
+        for col in cols:
+            delete_tree.heading(col, text=col)
+        delete_tree.column("ID", width=50, anchor="center")
+        delete_tree.column("Data", width=100, anchor="center")
+        delete_tree.column("Nº Ticket", width=120, anchor="center")
+        delete_tree.column("Descrição", width=300)
+        delete_tree.column("Ação Realizada", width=300)
+        delete_tree.column("Status", width=120, anchor="center")
+        delete_tree.pack(side="left", fill="both", expand=True)
+
+        delete_scrollbar = ttk.Scrollbar(delete_tree_frame, orient="vertical", command=delete_tree.yview)
+        delete_tree.configure(yscrollcommand=delete_scrollbar.set)
+        delete_scrollbar.pack(side="right", fill="y")
+
+        # Carrega todos os registros na Treeview da janela de deleção
+        records = self.db.fetch_all_records()
+        if records:
+            for row in records:
+                delete_tree.insert("", tk.END, values=row)
+
+        def perform_delete():
+            selected_items = delete_tree.selection()
+            if not selected_items:
+                messagebox.showwarning("Nenhum Selecionado", "Selecione um ou mais registros para deletar.")
+                return
+
+            if messagebox.askyesno("Confirmar Deleção", f"Tem certeza que deseja deletar {len(selected_items)} registro(s) selecionado(s)?"):
+                deleted_count = 0
+                for item_id in selected_items:
+                    record_id = delete_tree.item(item_id, 'values')[0] # Pega o ID do registro
+                    self.db.delete_record(record_id)
+                    deleted_count += 1
+                messagebox.showinfo("Sucesso", f"{deleted_count} registro(s) deletado(s) com sucesso!")
+                delete_window.destroy() # Fecha a janela de deleção
+                self._load_table() # Recarrega a tabela principal e as estatísticas
+
+        delete_button_frame = ttk.Frame(delete_window, padding=10)
+        delete_button_frame.pack(fill="x")
+        ttk.Button(delete_button_frame, text="Deletar Selecionados", command=perform_delete).pack(side="left", padx=5)
+        ttk.Button(delete_button_frame, text="Cancelar", command=delete_window.destroy).pack(side="right", padx=5)
+
+    # --- NOVO: Método para abrir a janela de edição de registro ---
+    def _open_edit_window(self):
+        edit_window = tk.Toplevel(self.root)
+        edit_window.title("Editar Registro")
+        edit_window.transient(self.root)
+        edit_window.grab_set()
+        edit_window.focus_set()
+        edit_window.state("zoomed")
+
+        # Frame para busca e seleção de ticket
+        search_frame = ttk.LabelFrame(edit_window, text="Buscar Ticket para Editar", padding=10)
+        search_frame.pack(pady=10, padx=10, fill="x")
+        search_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(search_frame, text="Nº Ticket/ID:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        search_entry = ttk.Entry(search_frame)
+        search_entry.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+
+        # Frame para a Treeview de seleção
+        edit_tree_frame = ttk.Frame(edit_window, padding=10)
+        edit_tree_frame.pack(fill="both", expand=True)
+
+        cols = ("ID", "Data", "Nº Ticket", "Descrição", "Ação Realizada", "Status")
+        edit_tree = ttk.Treeview(edit_tree_frame, columns=cols, show='headings', selectmode='browse') # 'browse' para seleção única
+        for col in cols:
+            edit_tree.heading(col, text=col)
+        edit_tree.column("ID", width=50, anchor="center")
+        edit_tree.column("Data", width=100, anchor="center")
+        edit_tree.column("Nº Ticket", width=120, anchor="center")
+        edit_tree.column("Descrição", width=300)
+        edit_tree.column("Ação Realizada", width=300)
+        edit_tree.column("Status", width=120, anchor="center")
+        edit_tree.pack(side="left", fill="both", expand=True)
+
+        edit_scrollbar = ttk.Scrollbar(edit_tree_frame, orient="vertical", command=edit_tree.yview)
+        edit_tree.configure(yscrollcommand=edit_scrollbar.set)
+        edit_scrollbar.pack(side="right", fill="y")
+
+        def load_edit_tree(records_to_load=None):
+            for row in edit_tree.get_children():
+                edit_tree.delete(row)
+            records = records_to_load if records_to_load is not None else self.db.fetch_all_records()
+            if records:
+                for row in records:
+                    edit_tree.insert("", tk.END, values=row)
+        load_edit_tree() # Carrega todos os registros inicialmente
+
+        # Frame para os campos de edição
+        edit_fields_frame = ttk.LabelFrame(edit_window, text="Dados do Ticket Selecionado", padding=15)
+        edit_fields_frame.pack(pady=10, padx=10, fill="x")
+        edit_fields_frame.columnconfigure(1, weight=1)
+        edit_fields_frame.columnconfigure(3, weight=1)
+        edit_fields_frame.columnconfigure(5, weight=1)
+
+        # Campos de entrada para edição
+        edit_id_entry = ttk.Entry(edit_fields_frame, width=10, state="readonly")
+        ttk.Label(edit_fields_frame, text="ID:").grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        edit_id_entry.grid(row=0, column=1, padx=5, pady=5, sticky="w")
+
+        edit_data_entry = ttk.Entry(edit_fields_frame)
+        ttk.Label(edit_fields_frame, text="Data (DD/MM/AAAA):").grid(row=0, column=2, padx=5, pady=5, sticky="w")
+        edit_data_entry.grid(row=0, column=3, padx=5, pady=5, sticky="ew")
+
+        edit_numero_entry = ttk.Entry(edit_fields_frame)
+        ttk.Label(edit_fields_frame, text="Nº Ticket/Chamado:").grid(row=0, column=4, padx=5, pady=5, sticky="w")
+        edit_numero_entry.grid(row=0, column=5, padx=5, pady=5, sticky="ew")
+
+        edit_descricao_entry = ttk.Entry(edit_fields_frame)
+        ttk.Label(edit_fields_frame, text="Descrição:").grid(row=1, column=0, padx=5, pady=5, sticky="w")
+        edit_descricao_entry.grid(row=1, column=1, columnspan=5, padx=5, pady=5, sticky="ew")
+
+        edit_acao_entry = ttk.Entry(edit_fields_frame)
+        ttk.Label(edit_fields_frame, text="Ação Realizada:").grid(row=2, column=0, padx=5, pady=5, sticky="w")
+        edit_acao_entry.grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky="ew")
+
+        edit_status_options = ["Aguardando Parceiro", "Cancelado", "Em Andamento", "Fechado", "Pendente de Resposta", "Resolvido"]
+        edit_status_combobox = ttk.Combobox(edit_fields_frame, values=edit_status_options, state="readonly")
+        ttk.Label(edit_fields_frame, text="Status:").grid(row=2, column=4, padx=5, pady=5, sticky="w")
+        edit_status_combobox.grid(row=2, column=5, padx=5, pady=5, sticky="ew")
+
+
+        def fill_edit_fields(values):
+            """Preenche os campos de edição com os valores do registro selecionado."""
+            edit_id_entry.config(state="normal")
+            edit_id_entry.delete(0, tk.END)
+            edit_id_entry.insert(0, values[0])
+            edit_id_entry.config(state="readonly")
+
+            edit_data_entry.delete(0, tk.END)
+            edit_data_entry.insert(0, values[1])
+
+            edit_numero_entry.delete(0, tk.END)
+            edit_numero_entry.insert(0, values[2])
+
+            edit_descricao_entry.delete(0, tk.END)
+            edit_descricao_entry.insert(0, values[3])
+
+            edit_acao_entry.delete(0, tk.END)
+            edit_acao_entry.insert(0, values[4])
+
+            edit_status_combobox.set(values[5])
+
+        def on_edit_tree_select(event):
+            selected_item = edit_tree.focus()
+            if selected_item:
+                values = edit_tree.item(selected_item, 'values')
+                fill_edit_fields(values)
+
+        edit_tree.bind("<<TreeviewSelect>>", on_edit_tree_select)
+
+        def search_ticket_for_edit():
+            search_term = search_entry.get().strip()
+            if not search_term:
+                load_edit_tree() # Se vazio, recarrega tudo
+                messagebox.showwarning("Busca Vazia", "Por favor, digite o número do ticket ou ID para buscar.")
+                return
+
+            # Tenta buscar por ID primeiro, se for numérico
+            try:
+                record_id = int(search_term)
+                record = self.db._execute_query("SELECT * FROM registros WHERE id = ?", (record_id,), fetch='one')
+            except ValueError:
+                record = None # Não é um ID numérico
+
+            # Se não encontrou por ID, tenta buscar por numero_ticket
+            if not record:
+                record = self.db.fetch_record_by_ticket_number(search_term)
+
+            if record:
+                load_edit_tree([record]) # Carrega apenas o registro encontrado na Treeview
+                fill_edit_fields(record) # Preenche os campos de edição
+            else:
+                messagebox.showinfo("Não Encontrado", f"Nenhum ticket encontrado com o número/ID: {search_term}")
+                load_edit_tree() # Recarrega a Treeview completa se não encontrou
+
+        ttk.Button(search_frame, text="Buscar Ticket", command=search_ticket_for_edit).grid(row=0, column=2, padx=5, pady=5, sticky="e")
+
+
+        def save_edited_record():
+            record_id = edit_id_entry.get()
+            if not record_id:
+                messagebox.showwarning("Nenhum Registro", "Selecione um registro para editar antes de salvar.")
+                return
+
+            # Validações básicas
+            data = edit_data_entry.get().strip()
+            numero = edit_numero_entry.get().strip()
+            descricao = edit_descricao_entry.get().strip()
+            acao = edit_acao_entry.get().strip()
+            status = edit_status_combobox.get().strip()
+
+            if not numero or not descricao or not data:
+                messagebox.showwarning("Campos Obrigatórios", "Os campos 'Data', 'Nº Ticket/Chamado' e 'Descrição' são obrigatórios.")
+                return
+
+            try:
+                # Valida o formato da data
+                datetime.strptime(data, "%d/%m/%Y")
+            except ValueError:
+                messagebox.showwarning("Data Inválida", "A data deve estar no formato DD/MM/AAAA.")
+                return
+
+            if messagebox.askyesno("Confirmar Edição", "Tem certeza que deseja salvar as alterações?"):
+                self.db.update_record(record_id, data, numero, descricao, acao, status)
+                messagebox.showinfo("Sucesso", "Registro atualizado com sucesso!")
+                edit_window.destroy() # Fecha a janela de edição
+                self._load_table() # Recarrega a tabela principal e as estatísticas
+
+        edit_button_frame = ttk.Frame(edit_window, padding=10)
+        edit_button_frame.pack(fill="x")
+        ttk.Button(edit_button_frame, text="Salvar Edição", command=save_edited_record).pack(side="left", padx=5)
+        ttk.Button(edit_button_frame, text="Cancelar", command=edit_window.destroy).pack(side="right", padx=5)
+
+
+    def _get_valid_date(self):
+        date_str = self.data_entry.get().strip()
+        try:
+            return datetime.strptime(date_str, "%d/%m/%Y").strftime("%d/%m/%Y")
+        except ValueError:
+            messagebox.showwarning("Data inválida", "A data deve estar no formato DD/MM/AAAA.")
+            return None
+
+    def _load_table(self, records=None):
+        """Carrega os dados na Treeview e atualiza os balões de estatísticas."""
+        for row in self.tree.get_children():
+            self.tree.delete(row)
+        if records is None:
+            records = self.db.fetch_all_records()
+        if records:
+            for row in records:
+                self.tree.insert("", tk.END, values=row)
+        self._update_statistics_cards() # Chama a atualização das estatísticas após carregar a tabela
+
+    def _validate_inputs(self):
+        # Esta validação é para os campos da tela principal (Adicionar)
+        if not self.numero_entry.get() or not self.descricao_entry.get():
+            messagebox.showwarning("Campos Vazios", "Os campos 'Nº Ticket/Chamado' e 'Descrição' são obrigatórios.")
+            return False
+        return True
+
+    # Os métodos _add_record, _update_record e _delete_record originais
+    # foram alterados para chamar as novas janelas ou foram refatorados.
+    # O _update_record e _delete_record na tela principal não são mais usados diretamente.
 
     def _search_record(self):
         search_term = self.numero_entry.get()
@@ -359,7 +601,8 @@ class TicketApp:
         self.numero_entry.delete(0, tk.END)
         self.descricao_entry.delete(0, tk.END)
         self.acao_entry.delete(0, tk.END)
-        self.status_combobox.set('Em Andamento') # Resetar para o status padrão
+        # Garante que a combobox de status seja atualizada com a nova ordem
+        self.status_combobox.set('Em Andamento')
         self.numero_entry.focus()
 
     def _fill_fields_on_select(self, event):
@@ -375,6 +618,7 @@ class TicketApp:
         self.numero_entry.insert(0, values[2])
         self.descricao_entry.insert(0, values[3])
         self.acao_entry.insert(0, values[4])
+        # Garante que a combobox de status seja atualizada com a nova ordem
         self.status_combobox.set(values[5])
 
     def _import_data(self):

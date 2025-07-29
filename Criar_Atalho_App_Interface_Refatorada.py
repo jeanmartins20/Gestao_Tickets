@@ -12,7 +12,7 @@ except AttributeError:
 def criar_atalho():
     desktop = winshell.desktop()
     # O caminho do aplicativo principal já está correto, apontando para o arquivo mais recente.
-    caminho_app = os.path.abspath("App_Gestao_Intereface_Refatorada.py")
+    caminho_app = os.path.abspath("App_Gestao_Intereface_Refatorada_V2.py")
     caminho_python = sys.executable
     atalho_path = os.path.join(desktop, "Gestão de Tickets.lnk")
     # Certifique-se de que o arquivo 'ticket_icon (2).ico' está no mesmo diretório do script.
