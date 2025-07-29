@@ -1,0 +1,17 @@
+id,data,numero_ticket,descricao,acao_realizada,status
+9,23/07/2025,460601,Ligação não registrada,Validado e registrado na timeline,Concluído
+10,23/07/2025,460603,Ligação não registrada,Validado e registrado na timeline,Concluído
+11,23/07/2025,461656,Ligação não registrada,validado e registrado na timeline,Concluído
+12,23/07/2025,460273,"Encontrei a ligação, porém não tem data finalização",Enviado ticket parceiro,Concluído
+14,24/07/2025,16923,Ligaçaõ com tempo incorreto,,Pendente
+15,25/07/2025,457827,Zeragem de ligação,,Pendente
+16,28/07/2025,458201,Áudio Não Encontrado (5150),Chamdao GoSat 5150,Aguardando Parceiro
+17,28/07/2025,457802,Áudio Não Encontrado (5148),Chamado GoSat 5148,Aguardando Parceiro
+18,28/07/2025,457827,deletar chamada,,Em Andamento
+19,29/07/2025,457827,Foi feito a zeragem da ligação por UPDATE no Hoop.,Feito ajuste do tempo de ligação,Concluído
+20,29/07/2025,459374,Chamada não registrada,Não foi localizado ligação do bd e no datadog,Concluído
+21,29/07/2025,459590,Ligação duplicada timeline do Lead,Feito ajuste via runbook hoop,Concluído
+22,29/07/2025,459476,Ligação duplicada timeline do Lead - Duplicado 459590,Feito ajuste via runbook hoop,Concluído
+23,29/07/2025,459973,ligação não registrada,Verificado no banco de dados e não foi encontrado ligação,Concluído
+24,29/07/2025,459946,"Foram encontrados 5 registros duplicados 305846631,305846999, 305847757, 305848454, 307705231 e deletados via runbook",Feito delete leadtime via runbook,Concluído
+25,29/07/2025,460273,Ligação não disponível no timelinelead,Aberto chamado GoSat (5153),Aguardando Parceiro
