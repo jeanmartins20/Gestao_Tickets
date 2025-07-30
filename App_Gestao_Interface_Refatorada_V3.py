@@ -233,25 +233,14 @@ class TicketApp:
         inicio_semana = hoje - timedelta(days=hoje.weekday())
         inicio_mes = hoje.replace(day=1)
 
-        # print(f"Hoje: {hoje}")
-        # print(f"Início da Semana: {inicio_semana}")
-        # print(f"Início do Mês: {inicio_mes}")
-        # print(f"DataFrame antes do filtro de status:\n{df[['data', 'status']].head()}")
-
         total_tickets = df.shape[0]
         # Filtra tickets tratados (status 'Resolvido' ou 'Fechado')
         df_treated = df[df['status'].isin(['Resolvido', 'Fechado'])]
-
-        # print(f"DataFrame de tickets tratados:\n{df_treated[['data', 'status']].head()}")
 
         # Certifique-se de comparar apenas a parte da data
         treated_today = df_treated[df_treated['data'].dt.date == hoje].shape[0]
         treated_week = df_treated[df_treated['data'].dt.date >= inicio_semana].shape[0]
         treated_month = df_treated[df_treated['data'].dt.date >= inicio_mes].shape[0]
-
-        # print(f"Tickets Tratados Hoje: {treated_today}")
-        # print(f"Tickets Tratados Semana: {treated_week}")
-        # print(f"Tickets Tratados Mês: {treated_month}")
 
 
         # Atualiza os labels dos balões
@@ -339,22 +328,29 @@ class TicketApp:
         self._load_table()
         self._clear_fields()
 
-    # --- NOVO: Método para abrir a janela de deleção de múltiplos registros ---
     def _open_delete_window(self):
         delete_window = tk.Toplevel(self.root)
         delete_window.title("Deletar Registros")
         delete_window.transient(self.root) # Define a janela principal como pai
         delete_window.grab_set() # Bloqueia interação com a janela principal
         delete_window.focus_set() # Foca na nova janela
-        delete_window.state("normal") # Alterado de "zoomed" para "normal"
+
+        # Calcular o tamanho e posição da janela de deleção
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        window_width = int(screen_width * 0.8) # 80% da largura da tela
+        window_height = int(screen_height * 0.9) # 90% da altura da tela (deixa espaço na parte inferior)
+        x_pos = int((screen_width - window_width) / 2)
+        y_pos = int((screen_height - window_height) / 2)
+        delete_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
 
         # Frame para a Treeview na janela de deleção
         delete_tree_frame = ttk.Frame(delete_window, padding=10)
         delete_tree_frame.pack(fill="both", expand=True)
 
         cols = ("ID", "Data", "Nº Ticket", "Descrição", "Ação Realizada", "Status")
-        # Permite seleção múltipla
-        delete_tree = ttk.Treeview(delete_tree_frame, columns=cols, show='headings', selectmode='extended')
+        # Permite seleção múltipla, altura inicial menor para melhor adaptação
+        delete_tree = ttk.Treeview(delete_tree_frame, columns=cols, show='headings', selectmode='extended', height=15)
         for col in cols:
             delete_tree.heading(col, text=col)
         delete_tree.column("ID", width=50, anchor="center")
@@ -396,14 +392,21 @@ class TicketApp:
         ttk.Button(delete_button_frame, text="Deletar Selecionados", command=perform_delete).pack(side="left", padx=5)
         ttk.Button(delete_button_frame, text="Cancelar", command=delete_window.destroy).pack(side="right", padx=5)
 
-    # --- NOVO: Método para abrir a janela de edição de registro ---
     def _open_edit_window(self):
         edit_window = tk.Toplevel(self.root)
         edit_window.title("Editar Registro")
         edit_window.transient(self.root)
         edit_window.grab_set()
         edit_window.focus_set()
-        edit_window.state("normal") # Alterado de "zoomed" para "normal"
+
+        # Calcular o tamanho e posição da janela de edição
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        window_width = int(screen_width * 0.8) # 80% da largura da tela
+        window_height = int(screen_height * 0.9) # 90% da altura da tela (deixa espaço na parte inferior)
+        x_pos = int((screen_width - window_width) / 2)
+        y_pos = int((screen_height - window_height) / 2)
+        edit_window.geometry(f"{window_width}x{window_height}+{x_pos}+{y_pos}")
 
         # Frame para busca e seleção de ticket
         search_frame = ttk.LabelFrame(edit_window, text="Buscar Ticket para Editar", padding=10)
@@ -419,7 +422,8 @@ class TicketApp:
         edit_tree_frame.pack(fill="both", expand=True)
 
         cols = ("ID", "Data", "Nº Ticket", "Descrição", "Ação Realizada", "Status")
-        edit_tree = ttk.Treeview(edit_tree_frame, columns=cols, show='headings', selectmode='browse') # 'browse' para seleção única
+        # Altura inicial menor para melhor adaptação
+        edit_tree = ttk.Treeview(edit_tree_frame, columns=cols, show='headings', selectmode='browse', height=10)
         for col in cols:
             edit_tree.heading(col, text=col)
         edit_tree.column("ID", width=50, anchor="center")
