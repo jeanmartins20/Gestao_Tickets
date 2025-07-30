@@ -7,7 +7,9 @@ import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 from contextlib import closing
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from mpl_toolkits.mplot3d import Axes3D # Importa para gráficos 3D
+# A linha abaixo para Axes3D não é mais estritamente necessária para gráficos 2D,
+# mas mantê-la não causa problemas se não for usada.
+# from mpl_toolkits.mplot3d import Axes3D
 
 class DatabaseManager:
     def __init__(self, db_name='tickets.db'):
@@ -166,6 +168,7 @@ class TicketApp:
         ttk.Button(button_frame, text="Limpar Campos", command=self._clear_fields).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Resumo e Gráfico", command=self._show_chart_popup).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Importar Dados", command=self._import_data).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Exportar Dados", command=self._export_data).pack(side="left", padx=5)
 
 
         # Frame para a Treeview (tabela de tickets)
@@ -290,24 +293,15 @@ class TicketApp:
         filter_controls_frame.pack(fill="x", pady=(0, 10))
 
         ttk.Label(filter_controls_frame, text="Filtrar por Período:").pack(side="left", padx=5)
-        period_options = ["Dia", "Mês", "Ano", "Total"]
+        # Opções de filtro para o gráfico: Total (por status), Mês, Ano
+        period_options = ["Total", "Mês", "Ano"]
         self.chart_period_combobox = ttk.Combobox(filter_controls_frame, values=period_options, state="readonly")
-        self.chart_period_combobox.set("Mês") # Padrão
+        self.chart_period_combobox.set("Total") # Padrão: mostrar por status e total geral
         self.chart_period_combobox.pack(side="left", padx=5)
 
-        ttk.Label(filter_controls_frame, text="Filtrar por Status:").pack(side="left", padx=5)
-        status_options = ["Todos", "Aguardando Parceiro", "Cancelado", "Em Andamento", "Fechado", "Pendente de Resposta", "Resolvido"]
-        self.chart_status_combobox = ttk.Combobox(filter_controls_frame, values=status_options, state="readonly")
-        self.chart_status_combobox.set("Todos") # Padrão
-        self.chart_status_combobox.pack(side="left", padx=5)
-
-        # NÃO PRECISA MAIS DO BOTÃO "Aplicar Filtros"
-
         # Configurar o gráfico inicial
-        # Use a figura para armazenar a referência e evitar que o coletor de lixo a remova
         self.fig_chart = plt.figure(figsize=(10, 6))
-        # Para um gráfico 3D visualizado em 2D, ainda precisamos de '3d' na projeção
-        self.chart_ax = self.fig_chart.add_subplot(111, projection='3d')
+        self.chart_ax = self.fig_chart.add_subplot(111)
         self.chart_canvas = FigureCanvasTkAgg(self.fig_chart, master=chart_window)
         self.chart_canvas_widget = self.chart_canvas.get_tk_widget()
         self.chart_canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=20, pady=10)
@@ -315,82 +309,77 @@ class TicketApp:
         # Atualiza o gráfico inicialmente com os filtros padrão
         self._update_chart(df, self.chart_canvas, self.chart_ax)
 
-        # Bind para atualizar o gráfico automaticamente quando o combobox de período ou status muda
+        # Bind para atualizar o gráfico automaticamente quando o combobox de período muda
         self.chart_period_combobox.bind("<<ComboboxSelected>>", lambda event: self._update_chart(df, self.chart_canvas, self.chart_ax))
-        self.chart_status_combobox.bind("<<ComboboxSelected>>", lambda event: self._update_chart(df, self.chart_canvas, self.chart_ax))
 
 
     def _update_chart(self, df, canvas, ax):
-        """Atualiza o gráfico com base nos filtros selecionados."""
+        """Atualiza o gráfico com base nos filtros selecionados, mostrando status e total."""
         ax.clear() # Limpa o gráfico anterior
 
         selected_period = self.chart_period_combobox.get()
-        selected_status = self.chart_status_combobox.get()
-
+        
         filtered_df = df.copy()
 
-        # Aplicar filtro de status
-        if selected_status != "Todos":
-            filtered_df = filtered_df[filtered_df['status'] == selected_status]
-
         if filtered_df.empty:
-            ax.text2D(0.5, 0.5, "Não há dados para os filtros selecionados.", transform=ax.transAxes, ha="center", va="center")
+            ax.text(0.5, 0.5, "Não há dados para os filtros selecionados.", transform=ax.transAxes, ha="center", va="center")
             canvas.draw()
             return
 
-        x_labels = []
-        values = []
+        x_labels = [] # Rótulos no eixo X (Status ou Período)
+        values = []   # Valores no eixo Y (Contagem de Tickets)
         title = ""
 
-        if selected_period == "Dia":
-            daily_counts = filtered_df.groupby(filtered_df['data'].dt.date).size()
-            x_labels = [d.strftime('%d/%m/%Y') for d in daily_counts.index]
-            values = daily_counts.values
-            title = f"Tickets por Dia (Status: {selected_status})"
-        elif selected_period == "Mês":
-            monthly_counts = filtered_df.groupby(filtered_df['data'].dt.to_period('M')).size()
+        if selected_period == "Mês":
+            # Agrupa por mês e ano
+            monthly_counts = filtered_df.groupby(filtered_df['data'].dt.to_period('M')).size().sort_index()
             x_labels = [p.strftime('%m/%Y') for p in monthly_counts.index]
             values = monthly_counts.values
-            title = f"Tickets por Mês (Status: {selected_status})"
+            title = "Tickets por Mês"
         elif selected_period == "Ano":
-            yearly_counts = filtered_df.groupby(filtered_df['data'].dt.year).size()
+            # Agrupa por ano
+            yearly_counts = filtered_df.groupby(filtered_df['data'].dt.year).size().sort_index()
             x_labels = [str(y) for y in yearly_counts.index]
             values = yearly_counts.values
-            title = f"Tickets por Ano (Status: {selected_status})"
-        else: # Total
-            status_counts = filtered_df['status'].value_counts().sort_index() # Ordenar por status para consistência
+            title = "Tickets por Ano"
+        else: # selected_period == "Total" (inclui status e total geral)
+            # Agrupa por status
+            status_counts = filtered_df['status'].value_counts().sort_index()
             x_labels = status_counts.index.tolist()
             values = status_counts.values.tolist()
-            title = "Total de Tickets por Status"
 
-        # Configurar o gráfico de colunas 3D (visualizado em 2D)
+            # Adiciona a coluna de "Total Geral"
+            x_labels.append("Total Geral")
+            values.append(filtered_df.shape[0]) # Total de todos os tickets
+
+            title = "Total de Tickets por Status e Geral"
+
+        # Configurar o gráfico de barras verticais
         x_pos = range(len(x_labels))
-        y_pos = [0] * len(x_labels)  # Todas as barras na mesma profundidade para visualização 2D-like
-        z_pos = [0] * len(x_labels)
-        dx = dy = [0.8] * len(x_labels) # Largura e "profundidade" das barras
-        dz = values # Altura das barras
-
-        # Usar um colormap para cores mais bonitas
-        # Garante que 'values' não seja vazio para evitar divisão por zero
-        colors = plt.cm.viridis(values / max(values) if values.size > 0 else 1)
         
-        ax.bar3d(x_pos, y_pos, z_pos, dx, dy, dz, color=colors, shade=True)
+        # Usar um colormap para cores mais bonitas
+        colors = 'skyblue' # Cor padrão
+        if len(values) > 0 and max(values) > 0:
+            normalized_values = [v / max(values) for v in values]
+            colors = plt.cm.viridis(normalized_values)
+        else:
+            colors = ['lightgray'] * len(values)
+        
+        ax.bar(x_pos, values, color=colors) # Usando ax.bar para gráfico vertical
 
         ax.set_title(title, fontsize=14)
-        ax.set_xlabel("Período/Status", fontsize=12)
-        ax.set_ylabel("", fontsize=12) # Remover rótulo do eixo Y (profundidade)
-        ax.set_zlabel("Contagem de Tickets", fontsize=12)
+        ax.set_xlabel("Período/Status", fontsize=12) # Eixo X é o período/status
+        ax.set_ylabel("Contagem de Tickets", fontsize=12) # Eixo Y é a contagem
 
         ax.set_xticks(x_pos)
-        ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10)
+        ax.set_xticklabels(x_labels, rotation=45, ha='right', fontsize=10) # Rotação para rótulos longos
+
+        # Adicionar valores nas barras para melhor leitura
+        for i, v in enumerate(values):
+            ax.text(i, v + 0.5, str(v), color='black', ha='center', va='bottom', fontsize=9) # Posição acima da barra
+
+        ax.grid(True, linestyle='--', alpha=0.6, axis='y') # Grade no eixo Y
         
-        # Ajustar os limites do eixo Y para uma visualização "2D" mais limpa
-        ax.set_ylim([-0.5, 0.5]) 
-        ax.set_yticks([]) # Remover os ticks do eixo Y
-
-        # Adicionar grade para melhor visualização
-        ax.grid(True, linestyle='--', alpha=0.6)
-
         plt.tight_layout()
         canvas.draw()
 
@@ -703,6 +692,32 @@ class TicketApp:
 
         except Exception as e:
             messagebox.showerror("Erro de Importação", f"Ocorreu um erro ao importar o arquivo: {e}")
+
+    def _export_data(self):
+        """Exporta todos os dados da tabela para um arquivo CSV ou Excel."""
+        records = self.db.fetch_all_records()
+        if not records:
+            messagebox.showinfo("Exportar Dados", "Não há dados para exportar.")
+            return
+
+        df = pd.DataFrame(records, columns=["ID", "Data", "Nº Ticket", "Descrição", "Ação Realizada", "Status"])
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".csv",
+            filetypes=[("Arquivos CSV", "*.csv"), ("Arquivos Excel", "*.xlsx")],
+            title="Salvar Dados Como"
+        )
+        if not file_path:
+            return
+
+        try:
+            if file_path.endswith('.csv'):
+                df.to_csv(file_path, index=False, encoding='utf-8-sig')
+            elif file_path.endswith('.xlsx'):
+                df.to_excel(file_path, index=False)
+            messagebox.showinfo("Exportação Concluída", f"Dados exportados com sucesso para:\n{file_path}")
+        except Exception as e:
+            messagebox.showerror("Erro de Exportação", f"Ocorreu um erro ao exportar os dados: {e}")
 
 
 if __name__ == "__main__":
