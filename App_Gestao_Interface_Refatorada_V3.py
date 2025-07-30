@@ -150,7 +150,7 @@ class TicketApp:
         ttk.Button(button_frame, text="Deletar", command=self._open_delete_window).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Buscar por Nº", command=self._search_record).pack(side="left", padx=5)
         ttk.Button(button_frame, text="Limpar Campos", command=self._clear_fields).pack(side="left", padx=5)
-        ttk.Button(button_frame, text="Resumo e Gráfico", command=self._show_chart_popup).pack(side="left", padx=5)
+        ttk.Button(button_frame, text="Resumo e Gráfico", command=self._show_chart_popup).pack(side="left", padx=5) # Renomeado para clareza
         ttk.Button(button_frame, text="Importar Dados", command=self._import_data).pack(side="left", padx=5)
 
 
@@ -217,8 +217,10 @@ class TicketApp:
             return
 
         df = pd.DataFrame(records, columns=["id", "data", "numero", "descricao", "acao", "status"])
+
+        # Garantir que a coluna 'data' seja do tipo datetime, tratando erros
         df['data'] = pd.to_datetime(df['data'], format='%d/%m/%Y', errors='coerce')
-        df.dropna(subset=['data'], inplace=True)
+        df.dropna(subset=['data'], inplace=True) # Remove linhas onde a data não pôde ser convertida
 
         if df.empty:
             # Se não houver dados válidos após a limpeza, reseta os contadores
@@ -231,14 +233,26 @@ class TicketApp:
         inicio_semana = hoje - timedelta(days=hoje.weekday())
         inicio_mes = hoje.replace(day=1)
 
+        # print(f"Hoje: {hoje}")
+        # print(f"Início da Semana: {inicio_semana}")
+        # print(f"Início do Mês: {inicio_mes}")
+        # print(f"DataFrame antes do filtro de status:\n{df[['data', 'status']].head()}")
+
         total_tickets = df.shape[0]
         # Filtra tickets tratados (status 'Resolvido' ou 'Fechado')
-        # Adicionado 'Fechado' como status tratado
         df_treated = df[df['status'].isin(['Resolvido', 'Fechado'])]
 
+        # print(f"DataFrame de tickets tratados:\n{df_treated[['data', 'status']].head()}")
+
+        # Certifique-se de comparar apenas a parte da data
         treated_today = df_treated[df_treated['data'].dt.date == hoje].shape[0]
         treated_week = df_treated[df_treated['data'].dt.date >= inicio_semana].shape[0]
         treated_month = df_treated[df_treated['data'].dt.date >= inicio_mes].shape[0]
+
+        # print(f"Tickets Tratados Hoje: {treated_today}")
+        # print(f"Tickets Tratados Semana: {treated_week}")
+        # print(f"Tickets Tratados Mês: {treated_month}")
+
 
         # Atualiza os labels dos balões
         self.stats_labels["total_tickets"].config(text=str(total_tickets))
@@ -307,6 +321,7 @@ class TicketApp:
         self._update_statistics_cards() # Chama a atualização das estatísticas após carregar a tabela
 
     def _validate_inputs(self):
+        # Esta validação é para os campos da tela principal (Adicionar)
         if not self.numero_entry.get() or not self.descricao_entry.get():
             messagebox.showwarning("Campos Vazios", "Os campos 'Nº Ticket/Chamado' e 'Descrição' são obrigatórios.")
             return False
@@ -331,7 +346,7 @@ class TicketApp:
         delete_window.transient(self.root) # Define a janela principal como pai
         delete_window.grab_set() # Bloqueia interação com a janela principal
         delete_window.focus_set() # Foca na nova janela
-        delete_window.state("zoomed") # Abre em tela cheia
+        delete_window.state("normal") # Alterado de "zoomed" para "normal"
 
         # Frame para a Treeview na janela de deleção
         delete_tree_frame = ttk.Frame(delete_window, padding=10)
@@ -388,7 +403,7 @@ class TicketApp:
         edit_window.transient(self.root)
         edit_window.grab_set()
         edit_window.focus_set()
-        edit_window.state("zoomed")
+        edit_window.state("normal") # Alterado de "zoomed" para "normal"
 
         # Frame para busca e seleção de ticket
         search_frame = ttk.LabelFrame(edit_window, text="Buscar Ticket para Editar", padding=10)
@@ -581,10 +596,6 @@ class TicketApp:
             return False
         return True
 
-    # Os métodos _add_record, _update_record e _delete_record originais
-    # foram alterados para chamar as novas janelas ou foram refatorados.
-    # O _update_record e _delete_record na tela principal não são mais usados diretamente.
-
     def _search_record(self):
         search_term = self.numero_entry.get()
         if not search_term:
@@ -688,4 +699,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     app = TicketApp(root)
     root.mainloop()
-
