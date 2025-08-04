@@ -12,3 +12,4 @@ python criar_atalho.py
 Você terá uma mensagem de retorno infomando que a instalação foi concluída com sucesso. 
 
 3 - Clique no ícone criado na área de trabalho. 
+
